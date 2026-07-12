@@ -1,0 +1,14 @@
+# Fichiers de configuration IDE
+.idea/
+
+# Environnements virtuels
+.venv/
+venv/
+
+# Base de données et historiques MLflow (pour ne pas polluer GitHub)
+mlruns/
+mlflow.db
+
+# Fichiers compilés par Python
+__pycache__/
+*.pyc
