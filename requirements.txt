@@ -7,3 +7,4 @@ streamlit
 joblib
 mlflow
 ipykernel
+requests
