@@ -9,23 +9,35 @@ st.markdown("Modèle entraîné sans la colonne 'Company' pour éviter le surapp
 
 st.sidebar.header("Paramètres de l'avion")
 
-# --- CHAMPS DE SAISIE (Correspondant exactement au modèle) ---
+# --- CHAMPS DE SAISIE AVEC SLIDERS ---
 
-# Variable catégorielle
-engine_type = st.sidebar.selectbox("Engine Type", ["Piston", "Turboprop", "Jet", "Unknown"])
+# Variable catégorielle : Selectbox
+engine_mapping = {
+    "Piston": "Piston",
+    "Turboprop": "Turbopropulseur",
+    "Jet": "Réacteur (Jet)",
+    "Unknown": "Inconnu"
+}
+engine_type = st.sidebar.selectbox(
+    "Type de moteur",
+    options=list(engine_mapping.keys()),
+    format_func=lambda x: engine_mapping[x]
+)
 
-# Variables numériques
-hp = st.sidebar.number_input("HP or lbs thr ea engine", value=300.0)
-stall_knots = st.sidebar.number_input("Stall Knots dirty", value=50.0)
-fuel = st.sidebar.number_input("Fuel gal/lbs", value=100.0)
-ceiling = st.sidebar.number_input("All eng service ceiling", value=15000.0)
-rate_of_climb = st.sidebar.number_input("All eng rate of climb", value=1000.0)
-gross_weight = st.sidebar.number_input("Gross weight lbs", value=3000.0)
-empty_weight = st.sidebar.number_input("Empty weight lbs", value=2000.0)
-range_nm = st.sidebar.number_input("Range N.M.", value=500.0)
+# Variables numériques : Sliders interactifs
+hp = st.sidebar.slider("Puissance / Poussée par moteur (Ch/lbs)", min_value=50.0, max_value=5000.0, value=300.0,
+                       step=10.0)
+stall_knots = st.sidebar.slider("Vitesse de décrochage (Nœuds)", min_value=30.0, max_value=150.0, value=50.0, step=1.0)
+fuel = st.sidebar.slider("Capacité de carburant (Gal/lbs)", min_value=10.0, max_value=5000.0, value=100.0, step=10.0)
+ceiling = st.sidebar.slider("Plafond pratique (Pieds)", min_value=5000.0, max_value=50000.0, value=15000.0, step=500.0)
+rate_of_climb = st.sidebar.slider("Taux de montée (Pieds/min)", min_value=200.0, max_value=6000.0, value=1000.0,
+                                  step=50.0)
+gross_weight = st.sidebar.slider("Poids brut (lbs)", min_value=500.0, max_value=50000.0, value=3000.0, step=100.0)
+empty_weight = st.sidebar.slider("Poids à vide (lbs)", min_value=300.0, max_value=30000.0, value=2000.0, step=100.0)
+range_nm = st.sidebar.slider("Autonomie (Milles Nautiques - NM)", min_value=100.0, max_value=10000.0, value=500.0,
+                             step=50.0)
 
-# Construction du dictionnaire
-# IMPORTANT: Les clés doivent correspondre EXACTEMENT aux noms de colonnes du dataset
+# Construction du dictionnaire pour l'API
 input_data = {
     "Engine Type": engine_type,
     "HP or lbs thr ea engine": hp,
@@ -49,18 +61,19 @@ if st.sidebar.button("Prédire la vitesse"):
         if response.status_code == 200:
             result = response.json()
 
-            # DEBUG : Afficher ce que l'API renvoie
-            st.write("Réponse brute de l'API :", result)
-
             if 'prediction' in result:
-                st.success(f"La vitesse prédite est : **{result['prediction']:.2f} Knots**")
+                # Affichage élégant du résultat
+                st.success(f"🎯 La vitesse maximale estimée est de : **{result['prediction']:.2f} Nœuds**")
+
+                with st.expander("Voir la réponse brute de l'API"):
+                    st.json(result)
             else:
-                st.error(f"L'API a répondu 200 OK, mais il manque la prédiction. Détails : {result}")
+                st.error(f"L'API a répondu correctement, mais la prédiction est manquante. Détails : {result}")
         else:
-            st.error(f"Erreur {response.status_code} : {response.text}")
+            st.error(f"Erreur de l'API ({response.status_code}) : {response.text}")
 
     except requests.exceptions.ConnectionError:
-        st.error("Impossible de connecter l'API. Vérifiez les logs avec 'docker-compose logs -f mlops_api'")
+        st.error("Impossible de se connecter à l'API. Assurez-vous que le conteneur FastAPI est en cours d'exécution.")
 
 st.markdown("---")
-st.write("Entraîné avec MLflow | Architecture MLOps")
+st.write("🛠️ Pipeline MLOps : Docker | MLflow | FastAPI | Streamlit")
