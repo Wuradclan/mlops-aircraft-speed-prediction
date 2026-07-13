@@ -1,10 +1,10 @@
 pandas
 numpy
 scikit-learn
+xgboost
 fastapi
 uvicorn
 streamlit
-joblib
 mlflow
-ipykernel
 requests
+sqlalchemy

@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+import os
 
 import joblib
 import mlflow
@@ -159,6 +160,8 @@ def main():
         DATA_PATH,
         target_column=TARGET_COLUMN,
     )
+    print("--- COLONNES ATTENDUES PAR LE MODÈLE ---")
+    print(X_train.columns.tolist())
 
     print("Données nettoyées avec succès")
     print(f"Shape de X_train: {X_train.shape}")
@@ -172,8 +175,14 @@ def main():
     best_run_name = None
 
     # 3. Configuration MLOps globale
-    mlflow.set_tracking_uri("sqlite:///mlflow.db")
+    #mlflow.set_tracking_uri("sqlite:///mlflow.db")
+    # Si on est sur Mac (pas de variable définie), on utilise "http://localhost:5050"
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5050")
+    mlflow.set_tracking_uri(tracking_uri)
+
+    print(f"Connexion à MLflow sur : {mlflow.get_tracking_uri()}")  # Pour debug
     mlflow.set_experiment("Prediction_Vitesse_Avion")
+
 
     # 4. Boucle d'entraînement
     for run_name, pipeline in models.items():

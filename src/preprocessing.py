@@ -10,7 +10,7 @@ except ModuleNotFoundError:
     except ModuleNotFoundError:
         default_file_path = "data/Aiplane_BlueBook.csv"
 
-CATEGORICAL_COLUMNS = ["Company", "Engine Type"]
+CATEGORICAL_COLUMNS = ["Engine Type"]
 
 # 🚨 CORRECTION MAJEURE (DATA LEAKAGE) :
 # La variable "Rcmnd cruise Knots" a été SUPPRIMÉE de cette liste.
