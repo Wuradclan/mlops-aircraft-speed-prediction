@@ -2,7 +2,12 @@
 FROM python:3.11-slim
 
 # Installation des dépendances système pour XGBoost
-RUN apt-get update && apt-get install -y libomp-dev && rm -rf /var/lib/apt/lists/*
+#RUN apt-get update && apt-get install -y libomp-dev && rm -rf /var/lib/apt/lists/*
+# Installation des dépendances système pour XGBoost ET H2O (Java)
+RUN apt-get update && apt-get install -y \
+    libomp-dev \
+    default-jdk \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -16,4 +21,5 @@ COPY src/ ./src/
 COPY data/ ./data/
 
 # La commande cruciale : on pointe vers src/train.py
-CMD ["python", "src/train.py"]
+#CMD ["python", "src/train_h2o.py"]
+CMD ["sleep", "infinity"]

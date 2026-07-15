@@ -1,8 +1,42 @@
 import streamlit as st
 import requests
 
-# Configuration de la page
+# 1. CONFIGURATION (Doit être la toute première commande)
 st.set_page_config(page_title="Prédiction de Vitesse d'Avion", page_icon="✈️")
+
+# 2. FONCTIONS
+def fetch_model_info():
+    try:
+        response = requests.get("http://api:8000/model-info")
+        if response.status_code == 200:
+            return response.json().get("model_name", "Inconnu")
+    except:
+        return "API Inaccessible"
+
+# 3. BARRE LATÉRALE (Maintenant que la page est config, tout s'affichera)
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔄 Maintenance")
+
+if st.sidebar.button("Recharger le modèle depuis MLflow"):
+    # ... ton code de rechargement ...
+    with st.sidebar.spinner("Rechargement en cours..."):
+        try:
+            response = requests.post("http://api:8000/reload-model")
+            if response.status_code == 200:
+                res_data = response.json()
+                if res_data["status"] == "success":
+                    st.sidebar.success(res_data["message"])
+                else:
+                    st.sidebar.error(res_data["message"])
+            else:
+                st.sidebar.error("Impossible de joindre l'API.")
+        except Exception as e:
+            st.sidebar.error(f"Erreur : {e}")
+# Affichage dans la barre latérale de Streamlit
+st.sidebar.markdown("---")
+st.sidebar.subheader("⚙️ Informations Système")
+model_actif = fetch_model_info()
+st.sidebar.info(f"🧠 Modèle en production : **{model_actif}**")
 
 # ==========================================
 # 1. SECTION ACCUEIL (Toujours visible)
