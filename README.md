@@ -95,7 +95,7 @@ Sélectionnez l'expérience Prediction_Vitesse_Avion.
 Vous pouvez visualiser le registre des runs, comparer les métriques (RMSE, R2, MAE) et analyser l'impact des hyperparamètres via les graphiques en coordonnées parallèles.
 Voici un aperçu de notre registre d'expérimentation affichant le modèle champion H2O AutoML surclassant les benchmarks classiques :
 
-![Registre des runs MLflow](images/mlflow_runs.png)
+![Registre des runs MLflow](images/runmlflow.png)
 
 🔌 5. Inférence via l'API (FastAPI)
 Le modèle gagnant est servi par une API robuste documentée automatiquement avec Swagger.
@@ -110,7 +110,7 @@ Accédez à l'application web : http://localhost:8501
 En cas de nouvel entraînement, utilisez le bouton "Recharger le modèle" pour synchroniser l'interface avec la dernière version en production.
 Ajustez les paramètres techniques (Poids, Puissance, Type de moteur) à l'aide des formulaires pour observer les prédictions.
 
-![Interface interactive Streamlit](images/streamlit_ui.png)
+![Interface interactive Streamlit](images/streamlit.png)
 
 🧹 7. Arrêt de l'infrastructure
 Pour éteindre proprement tous les services tout en conservant l'historique MLflow (grâce au volume partagé) :
