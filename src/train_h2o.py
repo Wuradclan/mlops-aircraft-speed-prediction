@@ -11,7 +11,7 @@ from h2o.automl import H2OAutoML
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import StackingRegressor,RandomForestRegressor
+from sklearn.ensemble import StackingRegressor, RandomForestRegressor, ExtraTreesRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, RidgeCV
 from sklearn.pipeline import Pipeline
@@ -20,7 +20,6 @@ from xgboost import XGBRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.svm import SVR
 from sklearn.neural_network import MLPRegressor
-from sklearn.ensemble import ExtraTreesRegressor
 
 os.environ["GIT_PYTHON_REFRESH"] = "quiet"
 
@@ -41,71 +40,60 @@ def build_preprocessor(feature_columns):
     numeric_features = [col for col in feature_columns if col in NUMERIC_COLUMNS and col != TARGET_COLUMN]
     categorical_features = [col for col in feature_columns if col in CATEGORICAL_COLUMNS]
 
+    # 1. On définit le transformer numérique (Imputer + Scaler)
     numeric_transformer = Pipeline(steps=[
         ("imputer", SimpleImputer(strategy="median")),
         ("scaler", StandardScaler())
     ])
 
+    # 2. On l'utilise ICI dans le ColumnTransformer
     preprocessor = ColumnTransformer(transformers=[
-        ("numeric", Pipeline(steps=[("imputer", SimpleImputer(strategy="median"))]), numeric_features),
+        ("numeric", numeric_transformer, numeric_features),
         ("categorical", Pipeline(steps=[("imputer", SimpleImputer(strategy="constant", fill_value="Unknown")),
                                         ("onehot", OneHotEncoder(handle_unknown="ignore"))]), categorical_features),
     ])
+
     return preprocessor
 
 
 def get_experiment_models(feature_columns, args):
     preprocessor = build_preprocessor(feature_columns)
 
-    # 1. Définition des modèles de base pour le Stacking
+    # 1. Uniquement des modèles robustes et performants en base
     base_models = [
-        # 1. Le Champion (Arbres boostés)
-        ('xgb',
-         XGBRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth, learning_rate=args.learning_rate)),
-
-        # 2. L'Arbre alternatif (Bagging robuste)
+        ('xgb', XGBRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth, learning_rate=args.learning_rate)),
         ('extra_trees', ExtraTreesRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth)),
-
-        # 3. Les Linéaires (Stabilité)
-        ('ridge', Ridge(alpha=args.alpha)),
-        ('lasso', Lasso(alpha=args.alpha)),
-
-        # 4. La Distance pure
-        ('knn', KNeighborsRegressor(n_neighbors=5)),
-
-        # 5. La Distance à Noyau (Relations non-linéaires)
-        ('svr', SVR(kernel='rbf', C=10.0, gamma='scale')),
-
-        # 6. Le Réseau de Neurones (Vision radicalement différente)
-        ('mlp', MLPRegressor(hidden_layer_sizes=(100, 50), activation='relu', max_iter=500, early_stopping=True))
+        ('rf', RandomForestRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth)),
+        ('ridge', Ridge(alpha=args.alpha))
     ]
 
-    # 2. Le Meta-modèle (Apprend à combiner les prédictions)
-    meta_model = RandomForestRegressor(n_estimators=100, max_depth=3, random_state=42)
+    # 2. Un méta-modèle linéaire robuste qui cherche le meilleur compromis (pondération)
+    meta_model = RidgeCV(alphas=np.logspace(-3, 3, 10))
 
     # 3. Construction du Stacking
-    #stacking_model = StackingRegressor(estimators=base_models, final_estimator=meta_model)
     stacking_model = StackingRegressor(
         estimators=base_models,
         final_estimator=meta_model,
-        cv=5,  # Validation croisée à 5 plis pour générer des prédictions robustes
-        n_jobs=-1  # Utilise tous les cœurs de ton processeur
+        cv=5,
+        n_jobs=-1
     )
 
     return {
         "run_01_linear": Pipeline(steps=[("preprocessor", preprocessor), ("model", LinearRegression())]),
         "run_02_ridge": Pipeline(steps=[("preprocessor", preprocessor), ("model", Ridge(alpha=args.alpha))]),
         "run_05_lasso": Pipeline(steps=[("preprocessor", preprocessor), ("model", Lasso(alpha=args.alpha))]),
-        "run_03_rf": Pipeline(steps=[("preprocessor", preprocessor), ("model", RandomForestRegressor(
-            n_estimators=args.n_estimators, max_depth=args.max_depth))]),
-        "run_04_xgboost": Pipeline(steps=[("preprocessor", preprocessor), ("model", XGBRegressor(
-            n_estimators=args.n_estimators, max_depth=args.max_depth, learning_rate=args.learning_rate))]),
+        "run_03_rf": Pipeline(steps=[("preprocessor", preprocessor), ("model", RandomForestRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth))]),
+        "run_04_xgboost": Pipeline(steps=[("preprocessor", preprocessor), ("model", XGBRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth, learning_rate=args.learning_rate))]),
+        "run_07_extra_trees": Pipeline(steps=[("preprocessor", preprocessor), ("model", ExtraTreesRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth))]),
+        "run_08_knn": Pipeline(steps=[("preprocessor", preprocessor), ("model", KNeighborsRegressor(n_neighbors=5))]),
+        "run_09_svr": Pipeline(steps=[("preprocessor", preprocessor), ("model", SVR(kernel='rbf', C=10.0, gamma='scale'))]),
+        "run_10_mlp": Pipeline(steps=[("preprocessor", preprocessor), ("model", MLPRegressor(hidden_layer_sizes=(100, 50), activation='relu', max_iter=500, early_stopping=True))]),
         "run_06_stacking": Pipeline(steps=[("preprocessor", preprocessor), ("model", stacking_model)])
     }
 
 # --- LOGIQUE H2O AUTOML ---
 def train_h2o_automl(df, target, max_runtime_secs=120):
-    h2o.init(nthreads=-1, strict_version_check=False)  # Utilise tous les cœurs CPU
+    h2o.init(nthreads=-1, strict_version_check=False)
     hf = h2o.H2OFrame(df)
     train, test = hf.split_frame(ratios=[0.8], seed=42)
 
@@ -117,9 +105,12 @@ def train_h2o_automl(df, target, max_runtime_secs=120):
 # --- MAIN ---
 def main():
     parser = argparse.ArgumentParser()
+
+    # ⚠️ CORRECTION : Ajout de TOUS les choix dans argparse
     parser.add_argument("--model_type", type=str, default="xgboost",
-                        choices=["linear", "ridge", "lasso", "random_forest", "xgboost", "h2o", "stacking", "svr",
-                                 "knn"])
+                        choices=["linear", "ridge", "lasso", "random_forest", "xgboost",
+                                 "extra_trees", "knn", "svr", "mlp", "h2o", "stacking"])
+
     parser.add_argument("--alpha", type=float, default=1.0)
     parser.add_argument("--n_estimators", type=int, default=100)
     parser.add_argument("--max_depth", type=int, default=10)
@@ -138,8 +129,7 @@ def main():
         print("🚀 Lancement H2O AutoML...")
         with mlflow.start_run(run_name="run_h2o_automl"):
             best_model = train_h2o_automl(cleaned_df, TARGET_COLUMN)
-            # Log des métriques
-            perf = best_model.model_performance(test_data=None)  # Si besoin de test data, l'extraire du split
+            perf = best_model.model_performance(test_data=None)
             nom_algo = best_model.algo
             mlflow.log_param("model_type", f"H2O_{nom_algo.upper()}")
 
@@ -150,17 +140,21 @@ def main():
             mlflow.h2o.log_model(best_model, name="model")
             print(f"H2O terminé. Leader RMSE: {perf.rmse()}")
 
-        # 4. Branche Classique
+    # 4. Branche Classique
     else:
         models = get_experiment_models(X_train.columns.tolist(), args)
 
-        # Mapping explicite et robuste entre l'argument du terminal et la clé du modèle
+        # ⚠️ CORRECTION : Ajout de TOUS les modèles dans le dictionnaire de mapping
         run_name_mapping = {
             "linear": "run_01_linear",
             "ridge": "run_02_ridge",
             "lasso": "run_05_lasso",
             "random_forest": "run_03_rf",
             "xgboost": "run_04_xgboost",
+            "extra_trees": "run_07_extra_trees",
+            "knn": "run_08_knn",
+            "svr": "run_09_svr",
+            "mlp": "run_10_mlp",
             "stacking": "run_06_stacking"
         }
 
@@ -174,20 +168,15 @@ def main():
             pipeline.fit(X_train, y_train)
             preds = pipeline.predict(X_test)
 
-            # 1. Calcul des métriques
+            # Calcul des métriques
             rmse = np.sqrt(mean_squared_error(y_test, preds))
             mae = mean_absolute_error(y_test, preds)
             mse = mean_squared_error(y_test, preds)
             r2 = r2_score(y_test, preds)
 
-            # 2. LOGGING AUTOMATIQUE (La méthode Pro)
-            # Cela enregistre TOUS tes arguments (n_estimators, max_depth, etc.) d'un seul coup
+            # LOGGING AUTOMATIQUE
             mlflow.log_params(vars(args))
-
-            # 3. Log des métriques
             mlflow.log_metrics({"rmse": rmse, "mae": mae, "mse": mse, "r2": r2})
-
-            # 4. Log du modèle
             mlflow.sklearn.log_model(pipeline, name="model", serialization_format="cloudpickle")
             joblib.dump(pipeline, MODEL_OUTPUT_PATH)
 
