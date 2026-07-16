@@ -93,16 +93,25 @@ Le suivi des expérimentations est disponible via l'interface web MLflow.
 Accédez à : http://localhost:5050
 Sélectionnez l'expérience Prediction_Vitesse_Avion.
 Vous pouvez visualiser le registre des runs, comparer les métriques (RMSE, R2, MAE) et analyser l'impact des hyperparamètres via les graphiques en coordonnées parallèles.
+Voici un aperçu de notre registre d'expérimentation affichant le modèle champion H2O AutoML surclassant les benchmarks classiques :
+
+![Registre des runs MLflow](images/mlflow_runs.png)
+
 🔌 5. Inférence via l'API (FastAPI)
 Le modèle gagnant est servi par une API robuste documentée automatiquement avec Swagger.
 Documentation interactive : http://localhost:8000/docs
 Endpoint de prédiction : POST /predict
 La route /reload-model permet à l'API de charger dynamiquement le meilleur modèle depuis le registre MLflow sans nécessiter le redémarrage du serveur.
+
+
 🖥️ 6. Interface Utilisateur (Streamlit)
 Une interface web a été développée pour permettre aux utilisateurs de simuler les caractéristiques d'un avion et d'obtenir une prédiction instantanée.
 Accédez à l'application web : http://localhost:8501
 En cas de nouvel entraînement, utilisez le bouton "Recharger le modèle" pour synchroniser l'interface avec la dernière version en production.
 Ajustez les paramètres techniques (Poids, Puissance, Type de moteur) à l'aide des formulaires pour observer les prédictions.
+
+![Interface interactive Streamlit](images/streamlit_ui.png)
+
 🧹 7. Arrêt de l'infrastructure
 Pour éteindre proprement tous les services tout en conservant l'historique MLflow (grâce au volume partagé) :
 
