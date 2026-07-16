@@ -43,9 +43,9 @@ Ce modèle utilise H2O AutoML pour générer un Stacked Ensemble optimisé de ma
 
 
 
-Bash
+```bash
 docker-compose exec trainer python src/train_h2o.py --model_type h2o
-
+```
 
 📊 Benchmark des Modèles de Base (Scikit-Learn)
 Pour comparer les performances et justifier le choix du modèle H2O, vous pouvez exécuter ces modèles individuellement :
@@ -53,40 +53,40 @@ Modèles à base d'arbres :
 
 
 
-Bash
+```bash
 docker-compose exec trainer python src/train_h2o.py --model_type xgboost --n_estimators 500 --max_depth 5 --learning_rate 0.05
 docker-compose exec trainer python src/train_h2o.py --model_type random_forest --n_estimators 200 --max_depth 10
 docker-compose exec trainer python src/train_h2o.py --model_type extra_trees --n_estimators 200 --max_depth 10
-
+```
 
 Modèles linéaires :
 
 
 
-Bash
+```bash
 docker-compose exec trainer python src/train_h2o.py --model_type linear
 docker-compose exec trainer python src/train_h2o.py --model_type ridge --alpha 10.0
 docker-compose exec trainer python src/train_h2o.py --model_type lasso --alpha 1.0
-
+```
 
 Modèles basés sur la distance & Réseaux de Neurones :
 (Ces modèles nécessitent le StandardScaler configuré dans le pipeline de preprocessing).
 
 
 
-Bash
+```bash
 docker-compose exec trainer python src/train_h2o.py --model_type knn
 docker-compose exec trainer python src/train_h2o.py --model_type svr
 docker-compose exec trainer python src/train_h2o.py --model_type mlp
-
+```
 
 Architecture Avancée (Ensemble manuel) :
 
 
 
-Bash
+```bash
 docker-compose exec trainer python src/train_h2o.py --model_type stacking --n_estimators 200 --max_depth 5
-
+```
 
 📈 4. Suivi et Comparaison des Modèles (MLflow)
 Le suivi des expérimentations est disponible via l'interface web MLflow.
@@ -108,7 +108,6 @@ Pour éteindre proprement tous les services tout en conservant l'historique MLfl
 
 
 
-Bash
+```bash
 docker-compose down
-
-
+```
