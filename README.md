@@ -95,7 +95,7 @@ Sélectionnez l'expérience Prediction_Vitesse_Avion.
 Vous pouvez visualiser le registre des runs, comparer les métriques (RMSE, R2, MAE) et analyser l'impact des hyperparamètres via les graphiques en coordonnées parallèles.
 Voici un aperçu de notre registre d'expérimentation affichant le modèle champion H2O AutoML surclassant les benchmarks classiques :
 
-![Registre des runs MLflow](images/runmlflow.png)
+![Registre des runs MLflow](images/runsmlflow.png)
 
 🔌 5. Inférence via l'API (FastAPI)
 Le modèle gagnant est servi par une API robuste documentée automatiquement avec Swagger.
