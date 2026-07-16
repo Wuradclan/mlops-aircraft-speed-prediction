@@ -1,0 +1,59 @@
+services:
+  mlflow:
+    build:
+      context: .
+      dockerfile: mlflow/Dockerfile
+    container_name: mlops_mlflow
+    hostname: mlflow
+    command: >
+      mlflow server 
+      --backend-store-uri sqlite:///mlflow.db 
+      --default-artifact-root /mlruns 
+      --host 0.0.0.0 
+      --port 5000 
+      --allowed-hosts "*" 
+      --cors-allowed-origins "*"
+    ports:
+      - "5050:5000"
+    volumes:
+      - ./mlruns:/mlruns
+      - .:/app
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: mlops_api
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mlflow
+    volumes:
+      - .:/app
+      - ./mlruns:/mlruns
+
+  frontend:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    container_name: mlops_streamlit
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+    volumes:
+      - .:/app
+
+  trainer:
+    build:
+      context: .
+      dockerfile: train/Dockerfile
+    container_name: mlops_trainer
+    volumes:
+      - ./mlruns:/mlruns
+      - .:/app
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      - mlflow

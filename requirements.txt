@@ -1,9 +1,20 @@
-pandas
+# Base Data Science
 numpy
+pandas
 scikit-learn
+joblib
+
+# Modèles ML
+xgboost
+h2o
+
+# MLOps & Tracking
+mlflow
+cloudpickle
+skops
+
+# API & Frontend
 fastapi
 uvicorn
+requests
 streamlit
-joblib
-mlflow
-ipykernel
