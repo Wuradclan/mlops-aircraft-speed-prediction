@@ -1,5 +1,126 @@
 # *****✈️ Aircraft Speed Prediction: End-to-End MLOps Pipeline*****
 
+This repository contains a complete MLOps infrastructure designed for rigor and transparency. Unlike basic approaches, this pipeline integrates an industrial "Model Gate" that ensures only generalizable models—and not those that overfit—reach production.
+
+## 🛠️ 1. Technical Architecture
+
+The project is containerized via Docker Compose to guarantee reproducibility and portability. It consists of 4 isolated microservices:
+*   **`mlflow`**: Tracking server for metrics, parameters, and artifact registry (`.pkl` models).
+*   **`trainer`**: Isolated training and experimentation environment (via `src/train.py`).
+*   **`api`**: REST API (FastAPI) for low-latency inference, integrating a strict "Model Gate" logic for dynamic champion model loading.
+*   **`frontend`**: Interactive user interface built with Streamlit for simulation and prediction.
+
+---
+
+## 🚀 2. Quick Start
+
+**1. Clone the project:**
+```bash
+git clone [https://github.com/Wuradclan/mlops-aircraft-speed-prediction.git](https://github.com/Wuradclan/mlops-aircraft-speed-prediction.git)
+cd mlops-aircraft-speed-prediction
+```
+
+## 2. Run the infrastructure:
+
+```Bash
+docker compose up -d --build
+```
+
+## 🧠 3. Model Zoo: Supported Algorithms
+
+The src/train.py script is highly modular and supports multiple algorithm families. 
+You can trigger a manual training run via the trainer container by specifying the --model_type parameter.
+
+### 🌲 Tree-based Models
+
+* xgboost: The industry standard for performance on tabular data.
+* random_forest: Robust and inherently less prone to overfitting.
+* extra_trees: Extremely randomized trees to maximize generalization.
+
+### 📈 Linear Models
+
+* linear: Simple linear regression (Baseline model).
+* ridge: Regression with L2 penalty (prevents coefficient explosion).
+* lasso: Regression with L1 penalty (built-in feature selection).
+
+### 📐 Distance & Neural Networks
+
+* knn: K-Nearest Neighbors (based on spatial proximity).
+* svr: Support Vector Regression (effective in high dimensions).
+* mlp: Multi-Layer Perceptron (dense neural network).
+
+### 🏗️ Ensembles & AutoML
+
+* stacking: Hybrid model combining predictions from several base estimators.
+* h2o: AutoML engine that automatically explores search spaces and builds an optimal Stacked Ensemble.
+
+## 🔄 4. Training Methods (Lifecycle)
+
+The pipeline uses src/train.py to orchestrate training using three distinct approaches, allowing us to compare the robustness of each method.
+
+#### A. Automated Exploration (H2O AutoML)
+
+AutoML is used to quickly explore complex search spaces and build Stacked Ensembles.
+Command:
+```Bash
+docker compose exec trainer python src/train.py --model_type h2o
+```
+
+#### B. Advanced & Robust Optimization (Optuna)
+
+For expert hyperparameter tuning on base models (XGBoost, Random Forest, etc.). The optimizer minimizes the RMSE while applying a strict penalty for overfitting to force the creation of stable models.
+Command:
+```Bash
+docker compose exec trainer python -B src/train.py --model_type xgboost --tune --n_trials 50
+```
+
+#### C. Baseline Training (Manual)
+
+To quickly train, evaluate, and version a specific model with fixed parameters:
+Command:
+```Bash
+docker compose exec trainer python src/train.py --model_type xgboost --n_estimators 500 --max_depth 5
+```
+
+## ⚖️ 5. Model Gate: Industrial Champion Selection (API)
+
+The API does not blindly accept the model with the best paper score. At startup (or via /reload-model), it queries MLflow and applies a strict Model Gate to prevent data leakage and memorization:
+Overfit Calculation:
+`Overfit = (RMSE_Test - RMSE_Train) / RMSE_Test`
+* Anti-Cheat Filtering: Any model exceeding a strict 30% overfit threshold is instantly eliminated, even if its RMSE seems excellent.
+* Dynamic Selection: Among the validated and stable models, the API automatically loads the one with the lowest RMSE_Test.
+* This approach penalizes models that merely memorize data (overfitting) in favor of models capable of generalizing in real-world conditions.
+
+## 🔌 6. Inference API & Monitoring
+
+Swagger UI (Interactive Docs): http://localhost:8000/docs
+Inference: POST /predict
+Model Status: GET /model-info (Displays the loaded algorithm and its validation metrics).
+Hot-Reload: POST /reload-model (Forces the API to query MLflow and seamlessly switch to a newly detected champion without downtime).
+
+## 📊 7. MLOps Tracking (MLflow)
+
+MLflow Dashboard: http://localhost:5050
+Traceability: Each training generates a Run with its parameters, Train/CV/Test metrics, and physical artifact (.pkl or H2O format). Optuna studies generate a clean "Parent Run" to group all trials.
+
+## 🖥️ 8. User Interface (Streamlit)
+
+Frontend Dashboard: http://localhost:8501
+Allows sending aircraft features to the API via an intuitive interface to visualize predictions in real-time.
+
+## 🧹 9. Maintenance & Cleanup
+
+To gracefully stop all services:
+Bash
+`docker compose down`
+To perform a complete purge (removes containers, networks, and wipes MLflow databases/volumes):
+Bash
+`docker compose down -v`
+Note: Virtual environment folders (venv), IDE files (.idea), and local binary models (.pkl) are excluded from versioning via .gitignore to keep the repository lightweight.
+
+#######################################################################################################
+# *****✈️ Aircraft Speed Prediction: End-to-End MLOps Pipeline*****
+
     Ce dépôt contient une infrastructure MLOps complète, conçue pour la rigueur et la transparence.
     Contrairement aux approches basiques, ce pipeline intègre une "Model Gate" industrielle qui garantit que seuls les modèles généralisables — et non ceux qui surapprennent — atteignent la production.
 
