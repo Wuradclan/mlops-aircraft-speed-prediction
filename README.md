@@ -81,6 +81,30 @@ Advanced Manual Ensembling (Pruned Stacking):
 ```Bash
 docker-compose exec trainer python src/train_h2o.py --model_type stacking --n_estimators 200 --max_depth 5
 ```
+## 🎯 Optimisation des Hyperparamètres avec Optuna
+
+Le projet intègre désormais **Optuna** pour la recherche automatique des meilleurs hyperparamètres (Hyperparameter Tuning). L'architecture a été sécurisée pour garantir une **reproductibilité totale** (`random_state=42` fixé sur tous les estimateurs et la validation croisée) et utilise un `TargetEncoder` pour maximiser les performances sur les variables catégorielles.
+
+### 🚀 Lancer une optimisation
+
+Pour lancer une étude Optuna, utilisez le flag `--tune` suivi du nombre d'essais souhaité via `--n_trials`. Le script se charge d'explorer l'espace de recherche, de trouver la meilleure combinaison, puis d'entraîner et de sauvegarder automatiquement le "Modèle Champion".
+
+**Commande Docker complète :**
+```bash
+docker compose exec trainer python -B src/train_h2o.py --model_type stacking --tune --n_trials 50
+```
+
+Note : Le flag -B est utilisé avec Python pour ignorer le cache compilé (__pycache__) et forcer la lecture du code source à jour.
+🛠️ Arguments disponibles pour l'optimisation :
+--tune : Active le mode d'optimisation Optuna (ignore les paramètres manuels).
+--n_trials <int> : Définit le nombre d'essais à réaliser par Optuna (par défaut : 20. Recommandé : entre 30 et 100 selon le temps de calcul disponible).
+--model_type <string> : L'algorithme à optimiser. Choix disponibles : stacking, xgboost, random_forest, extra_trees, ridge, lasso, linear, knn, svr, mlp.
+📊 Traçabilité dans MLflow
+L'intégration avec MLflow est entièrement automatisée :
+Run Parent : Une exécution principale nommée Optuna_Study_<model_type> est créée.
+Nested Runs (Sous-essais) : Chaque essai (Trial) d'Optuna génère un sous-run imbriqué contenant ses paramètres exacts et son score RMSE de validation croisée.
+Modèle Champion : À la fin de l'étude, les meilleurs hyperparamètres sont sélectionnés. Le modèle final est ré-entraîné sur l'intégralité du dataset d'entraînement (X_train), loggé en tant que champion_model dans MLflow, et sauvegardé localement dans models/model.pkl.
+
 📈 4. **Experiment Tracking & Comparison (MLflow) :**
 
 All training runs are logged in real-time. You can analyze training histories, compare key evaluation metrics (RMSE, R2, MAE), and explore hyperparameter correlations.
