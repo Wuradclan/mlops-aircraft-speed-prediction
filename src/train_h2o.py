@@ -9,6 +9,9 @@ import numpy as np
 import h2o
 from h2o.automl import H2OAutoML
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import optuna
+from sklearn.model_selection import KFold
+from category_encoders import TargetEncoder # <-- Import nécessaire en haut de trai
 
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import StackingRegressor, RandomForestRegressor, ExtraTreesRegressor
@@ -45,46 +48,91 @@ def build_preprocessor(feature_columns):
         ("imputer", SimpleImputer(strategy="median")),
         ("scaler", StandardScaler())
     ])
+    # Utilisation du TargetEncoder au lieu du OneHotEncoder
+    categorical_transformer = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="constant", fill_value="Unknown")),
+        ("target_encoder", TargetEncoder())
+    ])
 
-    # 2. On l'utilise ICI dans le ColumnTransformer
+    # # 2. On l'utilise ICI dans le ColumnTransformer
+    # preprocessor = ColumnTransformer(transformers=[
+    #     ("numeric", numeric_transformer, numeric_features),
+    #     ("categorical", Pipeline(steps=[("imputer", SimpleImputer(strategy="constant", fill_value="Unknown")),
+    #                                     ("onehot", OneHotEncoder(handle_unknown="ignore"))]), categorical_features),
+    # ])
     preprocessor = ColumnTransformer(transformers=[
         ("numeric", numeric_transformer, numeric_features),
-        ("categorical", Pipeline(steps=[("imputer", SimpleImputer(strategy="constant", fill_value="Unknown")),
-                                        ("onehot", OneHotEncoder(handle_unknown="ignore"))]), categorical_features),
+        ("categorical", categorical_transformer, categorical_features),
     ])
 
     return preprocessor
 
 
-def get_experiment_models(feature_columns, args):
+# def get_experiment_models(feature_columns, args):
+#     preprocessor = build_preprocessor(feature_columns)
+#
+#     # 1. Uniquement des modèles robustes et performants en base
+#     base_models = [
+#         ('xgb', XGBRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth, learning_rate=args.learning_rate)),
+#         ('extra_trees', ExtraTreesRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth)),
+#         ('rf', RandomForestRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth)),
+#         ('ridge', Ridge(alpha=args.alpha))
+#     ]
+#
+#     # 2. Un méta-modèle linéaire robuste qui cherche le meilleur compromis (pondération)
+#     meta_model = RidgeCV(alphas=np.logspace(-3, 3, 10))
+#
+#     # 3. Construction du Stacking
+#     stacking_model = StackingRegressor(
+#         estimators=base_models,
+#         final_estimator=meta_model,
+#         cv=5,
+#         n_jobs=-1
+#     )
+#
+#     return {
+#         "run_01_linear": Pipeline(steps=[("preprocessor", preprocessor), ("model", LinearRegression())]),
+#         "run_02_ridge": Pipeline(steps=[("preprocessor", preprocessor), ("model", Ridge(alpha=args.alpha))]),
+#         "run_05_lasso": Pipeline(steps=[("preprocessor", preprocessor), ("model", Lasso(alpha=args.alpha))]),
+#         "run_03_rf": Pipeline(steps=[("preprocessor", preprocessor), ("model", RandomForestRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth))]),
+#         "run_04_xgboost": Pipeline(steps=[("preprocessor", preprocessor), ("model", XGBRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth, learning_rate=args.learning_rate))]),
+#         "run_07_extra_trees": Pipeline(steps=[("preprocessor", preprocessor), ("model", ExtraTreesRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth))]),
+#         "run_08_knn": Pipeline(steps=[("preprocessor", preprocessor), ("model", KNeighborsRegressor(n_neighbors=5))]),
+#         "run_09_svr": Pipeline(steps=[("preprocessor", preprocessor), ("model", SVR(kernel='rbf', C=10.0, gamma='scale'))]),
+#         "run_10_mlp": Pipeline(steps=[("preprocessor", preprocessor), ("model", MLPRegressor(hidden_layer_sizes=(100, 50), activation='relu', max_iter=500, early_stopping=True))]),
+#         "run_06_stacking": Pipeline(steps=[("preprocessor", preprocessor), ("model", stacking_model)])
+#     }
+
+# ⚠️ MODIFICATION : On passe les paramètres explicitement pour permettre à Optuna de les modifier
+def get_experiment_models(feature_columns, n_estimators=100, max_depth=10, learning_rate=0.1, alpha=1.0):
     preprocessor = build_preprocessor(feature_columns)
 
-    # 1. Uniquement des modèles robustes et performants en base
     base_models = [
-        ('xgb', XGBRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth, learning_rate=args.learning_rate)),
-        ('extra_trees', ExtraTreesRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth)),
-        ('rf', RandomForestRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth)),
-        ('ridge', Ridge(alpha=args.alpha))
+        ('xgb', XGBRegressor(n_estimators=n_estimators, max_depth=max_depth, learning_rate=learning_rate)),
+        ('extra_trees', ExtraTreesRegressor(n_estimators=n_estimators, max_depth=max_depth)),
+        ('rf', RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth)),
+        ('ridge', Ridge(alpha=alpha))
     ]
 
-    # 2. Un méta-modèle linéaire robuste qui cherche le meilleur compromis (pondération)
     meta_model = RidgeCV(alphas=np.logspace(-3, 3, 10))
 
-    # 3. Construction du Stacking
+    # 2. On fixe l'aléatoire de la validation croisée du Stacking
+    cv_fixed = KFold(n_splits=5, shuffle=True, random_state=42)
+
     stacking_model = StackingRegressor(
         estimators=base_models,
         final_estimator=meta_model,
-        cv=5,
+        cv=cv_fixed,
         n_jobs=-1
     )
 
     return {
         "run_01_linear": Pipeline(steps=[("preprocessor", preprocessor), ("model", LinearRegression())]),
-        "run_02_ridge": Pipeline(steps=[("preprocessor", preprocessor), ("model", Ridge(alpha=args.alpha))]),
-        "run_05_lasso": Pipeline(steps=[("preprocessor", preprocessor), ("model", Lasso(alpha=args.alpha))]),
-        "run_03_rf": Pipeline(steps=[("preprocessor", preprocessor), ("model", RandomForestRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth))]),
-        "run_04_xgboost": Pipeline(steps=[("preprocessor", preprocessor), ("model", XGBRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth, learning_rate=args.learning_rate))]),
-        "run_07_extra_trees": Pipeline(steps=[("preprocessor", preprocessor), ("model", ExtraTreesRegressor(n_estimators=args.n_estimators, max_depth=args.max_depth))]),
+        "run_02_ridge": Pipeline(steps=[("preprocessor", preprocessor), ("model", Ridge(alpha=alpha))]),
+        "run_05_lasso": Pipeline(steps=[("preprocessor", preprocessor), ("model", Lasso(alpha=alpha))]),
+        "run_03_rf": Pipeline(steps=[("preprocessor", preprocessor), ("model", RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth))]),
+        "run_04_xgboost": Pipeline(steps=[("preprocessor", preprocessor), ("model", XGBRegressor(n_estimators=n_estimators, max_depth=max_depth, learning_rate=learning_rate))]),
+        "run_07_extra_trees": Pipeline(steps=[("preprocessor", preprocessor), ("model", ExtraTreesRegressor(n_estimators=n_estimators, max_depth=max_depth))]),
         "run_08_knn": Pipeline(steps=[("preprocessor", preprocessor), ("model", KNeighborsRegressor(n_neighbors=5))]),
         "run_09_svr": Pipeline(steps=[("preprocessor", preprocessor), ("model", SVR(kernel='rbf', C=10.0, gamma='scale'))]),
         "run_10_mlp": Pipeline(steps=[("preprocessor", preprocessor), ("model", MLPRegressor(hidden_layer_sizes=(100, 50), activation='relu', max_iter=500, early_stopping=True))]),
@@ -115,6 +163,11 @@ def main():
     parser.add_argument("--n_estimators", type=int, default=100)
     parser.add_argument("--max_depth", type=int, default=10)
     parser.add_argument("--learning_rate", type=float, default=0.1)
+    #args = parser.parse_args()
+
+    # ⚠️ NOUVEAUX ARGUMENTS POUR OPTUNA
+    parser.add_argument("--tune", action="store_true", help="Lancer l'optimisation Optuna")
+    parser.add_argument("--n_trials", type=int, default=20, help="Nombre d'essais Optuna")
     args = parser.parse_args()
 
     # 1. Chargement
@@ -123,6 +176,19 @@ def main():
     # 2. Configuration MLflow
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5050"))
     mlflow.set_experiment("Prediction_Vitesse_Avion")
+    # CORRECTION MAJEURE : LE DICTIONNAIRE EST DÉFINI ICI, ACCESSIBLE PAR TOUTES LES BRANCHES
+    run_name_mapping = {
+        "linear": "run_01_linear",
+        "ridge": "run_02_ridge",
+        "lasso": "run_05_lasso",
+        "random_forest": "run_03_rf",
+        "xgboost": "run_04_xgboost",
+        "extra_trees": "run_07_extra_trees",
+        "knn": "run_08_knn",
+        "svr": "run_09_svr",
+        "mlp": "run_10_mlp",
+        "stacking": "run_06_stacking"
+    }
 
     # 3. Branche H2O
     if args.model_type == "h2o":
@@ -140,27 +206,85 @@ def main():
             mlflow.h2o.log_model(best_model, name="model")
             print(f"H2O terminé. Leader RMSE: {perf.rmse()}")
 
+        # 4. Branche OPTUNA
+    elif args.tune:
+        print(f"🎯 Démarrage de l'optimisation Optuna pour {args.model_type} ({args.n_trials} trials)...")
+
+        # Le Run Parent qui contiendra toute l'étude
+        with mlflow.start_run(run_name=f"Optuna_Study_{args.model_type}") as parent_run:
+
+            def objective(trial):
+                # 4.1 Définition de l'espace de recherche (Configuration 500)
+                opt_n_estimators = trial.suggest_int("n_estimators", 100, 500, step=50)
+                opt_max_depth = trial.suggest_int("max_depth", 3, 15)
+                opt_learning_rate = trial.suggest_float("learning_rate", 0.01, 0.3, log=True)
+                opt_alpha = trial.suggest_float("alpha", 0.1, 10.0, log=True)
+
+                # 4.2 Génération du modèle avec les paramètres de l'essai
+                models = get_experiment_models(X_train.columns.tolist(),
+                                               n_estimators=opt_n_estimators,
+                                               max_depth=opt_max_depth,
+                                               learning_rate=opt_learning_rate,
+                                               alpha=opt_alpha)
+
+                run_name = run_name_mapping.get(args.model_type)
+                pipeline = models.get(run_name)
+
+                # 4.3 Sous-Run MLflow pour traçabilité (Nested = True)
+                with mlflow.start_run(run_name=f"trial_{trial.number}", nested=True):
+                    pipeline.fit(X_train, y_train)
+                    preds = pipeline.predict(X_test)
+
+                    rmse = np.sqrt(mean_squared_error(y_test, preds))
+
+                    mlflow.log_params({"n_estimators": opt_n_estimators, "max_depth": opt_max_depth,
+                                       "learning_rate": opt_learning_rate, "alpha": opt_alpha})
+                    mlflow.log_metric("rmse", rmse)
+
+                return rmse  # Optuna cherche à minimiser cette valeur
+
+            # 4.4 Lancement de l'étude
+            study = optuna.create_study(direction="minimize")
+            study.optimize(objective, n_trials=args.n_trials)
+
+            print(f"\n🏆 Meilleurs paramètres trouvés : {study.best_params}")
+
+            # 4.5 Entraînement du Modèle Champion
+            print("🚀 Entraînement final du modèle Champion...")
+            champ_models = get_experiment_models(X_train.columns.tolist(),
+                                                 n_estimators=study.best_params.get("n_estimators", args.n_estimators),
+                                                 max_depth=study.best_params.get("max_depth", args.max_depth),
+                                                 learning_rate=study.best_params.get("learning_rate",
+                                                                                     args.learning_rate),
+                                                 alpha=study.best_params.get("alpha", args.alpha))
+
+            champion_pipeline = champ_models.get(run_name_mapping.get(args.model_type))
+            champion_pipeline.fit(X_train, y_train)
+            champ_preds = champion_pipeline.predict(X_test)
+
+            champ_rmse = np.sqrt(mean_squared_error(y_test, champ_preds))
+            champ_r2 = r2_score(y_test, champ_preds)
+
+            # Log du Champion dans le Run Parent
+            mlflow.log_params(study.best_params)
+            mlflow.log_param("optimized", True)
+            mlflow.log_metrics({"rmse": champ_rmse, "r2": champ_r2})
+            mlflow.sklearn.log_model(champion_pipeline, name="champion_model", serialization_format="cloudpickle")
+            joblib.dump(champion_pipeline, MODEL_OUTPUT_PATH)
+
+            print(f"✅ Modèle Champion sauvegardé ! RMSE: {champ_rmse:.4f} | R2: {champ_r2:.4f}")
+
     # 4. Branche Classique
     else:
-        models = get_experiment_models(X_train.columns.tolist(), args)
-
-        # ⚠️ CORRECTION : Ajout de TOUS les modèles dans le dictionnaire de mapping
-        run_name_mapping = {
-            "linear": "run_01_linear",
-            "ridge": "run_02_ridge",
-            "lasso": "run_05_lasso",
-            "random_forest": "run_03_rf",
-            "xgboost": "run_04_xgboost",
-            "extra_trees": "run_07_extra_trees",
-            "knn": "run_08_knn",
-            "svr": "run_09_svr",
-            "mlp": "run_10_mlp",
-            "stacking": "run_06_stacking"
-        }
+        # CORRECTION : On passe les arguments individuels pour correspondre à la nouvelle fonction
+        models = get_experiment_models(X_train.columns.tolist(),
+                                       n_estimators=args.n_estimators,
+                                       max_depth=args.max_depth,
+                                       learning_rate=args.learning_rate,
+                                       alpha=args.alpha)
 
         run_name = run_name_mapping.get(args.model_type)
         pipeline = models.get(run_name)
-
         if pipeline is None:
             raise ValueError(f"Le modèle '{args.model_type}' n'est pas configuré correctement.")
 
