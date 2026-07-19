@@ -12,3 +12,11 @@ mlflow.db
 # Fichiers compilés par Python
 __pycache__/
 *.pyc
+logs/
+.DS_Store
+
+# Modèles binaires
+*.pkl
+models/
+
+/h2o_feature_importance.csv
