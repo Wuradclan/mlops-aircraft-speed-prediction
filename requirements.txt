@@ -12,9 +12,11 @@ h2o
 mlflow
 cloudpickle
 skops
+optuna
 
 # API & Frontend
 fastapi
 uvicorn
 requests
 streamlit
+category_encoders

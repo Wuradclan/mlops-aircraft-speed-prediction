@@ -13,47 +13,77 @@ model_name_info = "Aucun modèle chargé"
 
 
 def load_best_model_from_mlflow():
-    """Cherche et charge dynamiquement le meilleur modèle depuis MLflow"""
+    """Cherche et charge le meilleur modèle basé sur un score de robustesse."""
     global best_model, model_name_info
 
     try:
-        # On force l'adresse du conteneur MLflow sur le réseau Docker interne
         mlflow.set_tracking_uri("http://mlflow:5000")
-
-        # 1. Trouver l'expérience
         experiment = mlflow.get_experiment_by_name("Prediction_Vitesse_Avion")
         if not experiment:
-            print("Erreur : L'expérience MLflow est introuvable.")
             return
 
-        # 2. Chercher le meilleur run (le plus petit RMSE)
+        # 1. Récupération des runs valides
         runs = mlflow.search_runs(
             experiment_ids=[experiment.experiment_id],
-            order_by=["metrics.rmse ASC"],
-            max_results=1
+            filter_string="metrics.rmse_test >= 0 AND metrics.rmse_cv >= 0 AND metrics.rmse_train >= 0",
+            max_results=50
         )
 
         if runs.empty:
-            print("Erreur : Aucun run trouvé dans l'expérience.")
+            print("❌ Aucun modèle complet trouvé.")
             return
 
-        best_run = runs.iloc[0]
+        # On exclut les sous-runs (qui n'ont pas de modèle physique)
+        if 'tags.mlflow.parentRunId' in runs.columns:
+            runs = runs[runs['tags.mlflow.parentRunId'].isnull()]
+
+        # Par sécurité, on exclut aussi tout ce qui s'appelle "trial_"
+        if 'tags.mlflow.runName' in runs.columns:
+            runs = runs[~runs['tags.mlflow.runName'].str.startswith('trial_', na=False)]
+
+        if runs.empty:
+            print("❌ Aucun modèle physique valide trouvé après filtrage des trials.")
+            return
+        # --- NOUVELLE LOGIQUE INDUSTRIELLE ---
+
+        # 1. Calcul du pourcentage de surapprentissage (Overfit %)
+        runs['overfit_pct'] = (runs['metrics.rmse_test'] - runs['metrics.rmse_train']) / runs['metrics.rmse_test']
+        runs['overfit_pct'] = runs['overfit_pct'].clip(lower=0)  # Sécurité pour les rares valeurs négatives
+
+        # 2. Application du seuil de tolérance (30% d'écart maximum autorisé)
+        TOLERANCE_THRESHOLD = 0.30
+        valid_runs = runs[runs['overfit_pct'] <= TOLERANCE_THRESHOLD]
+
+        # 3. Sélection du Champion
+        if not valid_runs.empty:
+            # Scénario idéal : on prend le modèle avec le meilleur RMSE_Test parmi ceux qui ne trichent pas
+            best_run = valid_runs.loc[valid_runs['metrics.rmse_test'].idxmin()]
+            print(f"🟢 Modèle validé selon les standards industriels (< {TOLERANCE_THRESHOLD * 100}% overfit).")
+        else:
+            # Fallback de sécurité : Si TOUS les modèles surapprennent, on prend le "plus stable"
+            print("⚠️ Attention : Tous les modèles dépassent le seuil d'overfitting. Mode Fallback activé.")
+            best_run = runs.loc[runs['overfit_pct'].idxmin()]
+
         best_run_id = best_run["run_id"]
 
-        # Récupération du nom du modèle (paramètre qu'on a logué plus tôt)
-        model_name_info = best_run.get("params.model_type", "Inconnu (PyFunc)")
-        print(f"🏆 Meilleur modèle trouvé : {model_name_info} (Run: {best_run_id})")
+        # Logs
+        print(f"🏆 Champion détecté : {best_run.get('tags.mlflow.runName', 'Sans nom')}")
+        print(f"   RMSE Test: {best_run['metrics.rmse_test']:.2f}")
+        print(f"   Surapprentissage: {best_run['overfit_pct'] * 100:.1f}%")
 
-        # 3. Charger le modèle via l'interface universelle pyfunc
+        # 4. Chargement
         model_uri = f"runs:/{best_run_id}/model"
         best_model = mlflow.pyfunc.load_model(model_uri)
-        print("✅ Modèle chargé en mémoire avec succès !")
 
+        # 5. Mise à jour de l'affichage
+        model_type = str(best_run.get("params.model_type", "Modèle"))
+        model_name_info = f"{model_type} (RMSE: {best_run['metrics.rmse_test']:.2f} | Overfit: {best_run['overfit_pct'] * 100:.1f}%)"
+
+        print(f"✅ Modèle chargé : {model_name_info}")
     except Exception as e:
-        print(f"❌ Erreur critique lors du chargement MLflow : {e}")
+        print(f"❌ Erreur critique : {e}")
+        import traceback
         traceback.print_exc()
-
-
 # On exécute la recherche au démarrage de l'API
 load_best_model_from_mlflow()
 
