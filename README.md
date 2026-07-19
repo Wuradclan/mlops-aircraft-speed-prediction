@@ -111,11 +111,13 @@ Allows sending aircraft features to the API via an intuitive interface to visual
 ## 🧹 9. Maintenance & Cleanup
 
 To gracefully stop all services:
-Bash
-`docker compose down`
+```Bash
+docker compose down
+````
 To perform a complete purge (removes containers, networks, and wipes MLflow databases/volumes):
-Bash
-`docker compose down -v`
+```Bash
+docker compose down -v
+````
 Note: Virtual environment folders (venv), IDE files (.idea), and local binary models (.pkl) are excluded from versioning via .gitignore to keep the repository lightweight.
 
 #######################################################################################################
