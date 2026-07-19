@@ -41,15 +41,19 @@ docker-compose exec trainer python src/train_h2o.py --model_type xgboost --n_est
 L'API utilise une logique de sélection basée sur la robustesse pour éviter le surapprentissage. Au démarrage ou via /reload-model, elle interroge MLflow et calcule un Score de Robustesse :
 Score=RMSE_Test+(0.5×∣RMSE_Train−RMSE_Test∣)
 Cette approche pénalise les modèles qui "trichent" (overfitting) au profit de modèles généralisables.
+
 🔌 5. API d'Inférence et Monitoring
 Swagger Docs : http://localhost:8000/docs
 Prédiction : POST /predict
 Rechargement dynamique : POST /reload-model (bascule automatiquement sur le nouveau champion détecté).
+
 📊 6. Suivi des Expérimentations (MLflow)
 Dashboard : http://localhost:5050
 Auto-discovery : Chaque run Optuna crée un "Parent Run" regroupant tous les "Nested Runs" (trials).
+
 🖥️ 7. Interface Utilisateur (Streamlit)
 Accès : http://localhost:8501
+
 🧹 8. Maintenance
 Arrêt des services :
 ```Bash
