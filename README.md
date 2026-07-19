@@ -1,135 +1,60 @@
-# ✈️ Aircraft Speed Prediction: End-to-End MLOps Pipeline
-
-This repository contains the complete production-ready infrastructure for an MLOps pipeline dedicated to predicting the velocity of light and commercial aircraft based on their technical specifications. 
-
-Following an extensive benchmarking phase (comparing Scikit-Learn, XGBoost, a custom Stacking Regressor, and Automated Machine Learning), the selected production champion is powered by **H2O AutoML** (Stacked Ensemble), delivering state-of-the-art performance with a **RMSE of ~5.30**.
-
----
-
-## 🛠️ 1. Technical Architecture
-
-The entire project is containerized using Docker Compose to ensure absolute reproducibility across environments. It is split into 4 decoupled microservices:
-
-* **`mlflow`**: Tracking server that logs hyperparameters, metrics, and models using a local SQLite backend database.
-* **`trainer`**: Isolated training environment designed to run ML experimentation scripts without disrupting production.
-* **`api`**: Backend REST API built with **FastAPI** that serves the production model for low-latency inference.
-* **`frontend`**: Interactive user interface developed with **Streamlit** for real-time model simulation.
-
----
-
-## 🚀 2. Getting Started & Installation
-
-Ensure you have [Docker](https://docs.docker.com/get-docker/) and Docker Compose installed on your machine.
-
-1. **Clone the repository:**
-   ```bash
-   git clone [https://github.com/Wuradclan/mlops-aircraft-speed-prediction.git](https://github.com/Wuradclan/mlops-aircraft-speed-prediction.git)
-   cd mlops-aircraft-speed-prediction
-   ```
-
-2. **Launch the entire infrastructure:**
-   
+✈️ Aircraft Speed Prediction: End-to-End MLOps Pipeline
+Ce dépôt contient une infrastructure MLOps complète et prête pour la production, dédiée à la prédiction de la vitesse des avions commerciaux.
+Suite à une phase de benchmarking extensive (comparant Scikit-Learn, XGBoost, un Stacking Regressor personnalisé et l'AutoML), le modèle Champion sélectionné pour la production est propulsé par H2O AutoML (Stacked Ensemble), offrant des performances de pointe avec un RMSE de ~5.30.
+🛠️ 1. Architecture Technique
+Le projet est conteneurisé via Docker Compose pour garantir la reproductibilité. Il se compose de 4 microservices :
+mlflow : Serveur de suivi pour les métriques, paramètres et artéfacts.
+trainer : Environnement isolé pour l'entraînement et l'expérimentation (via src/train_h2o.py).
+api : API REST (FastAPI) pour l'inférence en basse latence avec chargement dynamique du meilleur modèle.
+frontend : Interface interactive (Streamlit) pour la simulation.
+🚀 2. Démarrage Rapide
+Cloner le projet :
+```Bash
+git clone https://github.com/Wuradclan/mlops-aircraft-speed-prediction.git
+cd mlops-aircraft-speed-prediction
+```
+Lancer l'infrastructure :
 ```Bash
 docker-compose up -d --build
 ```
-(Note: If you modify the source code or need a clean state, purge the cache using docker-compose down -v before rebuilding).
 
-🧠 3. **Running Experiments (Model Lifecycle):**
-
-Model training is executed within the isolated trainer container. All training runs, parameters, and evaluation metrics are automatically synced to the MLflow server.
-🏆 The Production Champion (AutoML)
-This pipeline triggers H2O AutoML to automatically explore the hyperparameter space, perform feature scaling, and build a highly optimized Stacked Ensemble model.
+🧠 3. Cycle de vie des modèles
+A. Le Champion : H2O AutoML
+Le pipeline utilise src/train_h2o.py pour orchestrer les entraînements. H2O AutoML est utilisé pour explorer automatiquement les espaces de recherche complexes, effectuer le feature scaling et construire un Stacked Ensemble optimisé.
+B. Optimisation automatique avec Optuna
+En complément, nous utilisons Optuna pour l'optimisation fine des hyperparamètres sur les modèles de base (XGBoost, Random Forest, etc.).
+Commande pour lancer une optimisation :
 ```Bash
-docker-compose exec trainer python src/train_h2o.py --model_type h2o
-```
-
-📊 Baseline Benchmarks (Scikit-Learn & XGBoost)
-To thoroughly evaluate model performance and justify the deployment of H2O AutoML, you can train and track individual baseline models using the following CLI commands:
-Tree-Based Ensembles:
-
-```Bash
-docker-compose exec trainer python src/train_h2o.py --model_type xgboost --n_estimators 500 --max_depth 5 --learning_rate 0.05
-```
-```Bash
-docker-compose exec trainer python src/train_h2o.py --model_type random_forest --n_estimators 200 --max_depth 10
-```
-```Bash
-docker-compose exec trainer python src/train_h2o.py --model_type extra_trees --n_estimators 200 --max_depth 10
-```
-Linear Models:
-
-```Bash
-docker-compose exec trainer python src/train_h2o.py --model_type linear
-```
-```Bash
-docker-compose exec trainer python src/train_h2o.py --model_type ridge --alpha 10.0
-```
-```Bash
-docker-compose exec trainer python src/train_h2o.py --model_type lasso --alpha 1.0
-```
-Distance-Based & Neural Networks: (These models automatically leverage the StandardScaler integrated into the preprocessing pipeline).
-```Bash
-docker-compose exec trainer python src/train_h2o.py --model_type knn
-```
-```Bash
-docker-compose exec trainer python src/train_h2o.py --model_type svr
-```
-```Bash
-docker-compose exec trainer python src/train_h2o.py --model_type mlp
-```
-Advanced Manual Ensembling (Pruned Stacking):
-```Bash
-docker-compose exec trainer python src/train_h2o.py --model_type stacking --n_estimators 200 --max_depth 5
-```
-## 🎯 Optimisation des Hyperparamètres avec Optuna
-
-Le projet intègre désormais **Optuna** pour la recherche automatique des meilleurs hyperparamètres (Hyperparameter Tuning). L'architecture a été sécurisée pour garantir une **reproductibilité totale** (`random_state=42` fixé sur tous les estimateurs et la validation croisée) et utilise un `TargetEncoder` pour maximiser les performances sur les variables catégorielles.
-
-### 🚀 Lancer une optimisation
-
-Pour lancer une étude Optuna, utilisez le flag `--tune` suivi du nombre d'essais souhaité via `--n_trials`. Le script se charge d'explorer l'espace de recherche, de trouver la meilleure combinaison, puis d'entraîner et de sauvegarder automatiquement le "Modèle Champion".
-
-**Commande Docker complète :**
-```bash
 docker compose exec trainer python -B src/train_h2o.py --model_type stacking --tune --n_trials 50
 ```
 
-Note : Le flag -B est utilisé avec Python pour ignorer le cache compilé (__pycache__) et forcer la lecture du code source à jour.
-🛠️ Arguments disponibles pour l'optimisation :
---tune : Active le mode d'optimisation Optuna (ignore les paramètres manuels).
---n_trials <int> : Définit le nombre d'essais à réaliser par Optuna (par défaut : 20. Recommandé : entre 30 et 100 selon le temps de calcul disponible).
---model_type <string> : L'algorithme à optimiser. Choix disponibles : stacking, xgboost, random_forest, extra_trees, ridge, lasso, linear, knn, svr, mlp.
-📊 Traçabilité dans MLflow
-L'intégration avec MLflow est entièrement automatisée :
-Run Parent : Une exécution principale nommée Optuna_Study_<model_type> est créée.
-Nested Runs (Sous-essais) : Chaque essai (Trial) d'Optuna génère un sous-run imbriqué contenant ses paramètres exacts et son score RMSE de validation croisée.
-Modèle Champion : À la fin de l'étude, les meilleurs hyperparamètres sont sélectionnés. Le modèle final est ré-entraîné sur l'intégralité du dataset d'entraînement (X_train), loggé en tant que champion_model dans MLflow, et sauvegardé localement dans models/model.pkl.
+C. Entraînement Baseline (Manuel)
+Pour entraîner un modèle spécifique (ex: XGBoost) :
 
-📈 4. **Experiment Tracking & Comparison (MLflow) :**
+```Bash
+docker-compose exec trainer python src/train_h2o.py --model_type xgboost --n_estimators 500 --max_depth 5
+```
 
-All training runs are logged in real-time. You can analyze training histories, compare key evaluation metrics (RMSE, R2, MAE), and explore hyperparameter correlations.
-Access the UI dashboard: http://localhost:5050
-Select the Prediction_Vitesse_Avion experiment.
-Below is an overview of the MLflow tracking registry showing the automated H2O champion outperforming classical baselines:
-![Registre des runs MLflow](images/runsmlflow.png)
-
-🔌 5. **Production Inference API (FastAPI).**
-
-The winning model artifact is served via a high-performance REST API packaged with automated Swagger documentation.
-Interactive Swagger Documentation: http://localhost:8000/docs
-Prediction Endpoint: POST /predict
-Dynamic Hot-Reloading: The /reload-model endpoint allows the API to fetch and load the latest champion model from the MLflow registry dynamically without requiring a server reboot.
-
-🖥️ 6. **Interactive User Interface (Streamlit).**
-
-A web interface was developed to bridge the gap between technical metrics and end-user business logic, permitting users to simulate technical aircraft characteristics and witness live predictions.
-Access the web app: http://localhost:8501
-Tweak technical specifications (such as Engine Type, Horsepower, Gross Weight, and Fuel Capacity) using the sidebar forms.
-The UI queries the FastAPI backend asynchronously and displays both the computed speed and the raw JSON API response.
-![Interface interactive Streamlit](images/streamlit.png)
-
-🧹 7. **Teardown & Clean Up.**
-
-To gracefully stop and remove all active microservices while preserving the MLflow experiment history (persisted through Docker volumes):
-Bash
+⚖️ 4. Sélection intelligente du "Modèle Champion" (API)
+L'API utilise une logique de sélection basée sur la robustesse pour éviter le surapprentissage. Au démarrage ou via /reload-model, elle interroge MLflow et calcule un Score de Robustesse :
+Score=RMSE_Test+(0.5×∣RMSE_Train−RMSE_Test∣)
+Cette approche pénalise les modèles qui "trichent" (overfitting) au profit de modèles généralisables.
+🔌 5. API d'Inférence et Monitoring
+Swagger Docs : http://localhost:8000/docs
+Prédiction : POST /predict
+Rechargement dynamique : POST /reload-model (bascule automatiquement sur le nouveau champion détecté).
+📊 6. Suivi des Expérimentations (MLflow)
+Dashboard : http://localhost:5050
+Auto-discovery : Chaque run Optuna crée un "Parent Run" regroupant tous les "Nested Runs" (trials).
+🖥️ 7. Interface Utilisateur (Streamlit)
+Accès : http://localhost:8501
+🧹 8. Maintenance
+Arrêt des services :
+```Bash
 docker-compose down
+```
+Pour purger complètement l'environnement (incluant les volumes persistants) :
+```Bash
+docker-compose down -v
+```
+Note : Les fichiers IDE (.idea) et les modèles binaires (.pkl) sont exclus du versioning via .gitignore.
