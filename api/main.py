@@ -22,8 +22,7 @@ def load_best_model_from_mlflow():
         if not experiment:
             return
 
-        # 1. Récupération des runs valides (avec métriques complètes)
-        # On augmente max_results pour avoir un pool de modèles à comparer
+        # 1. Récupération des runs valides
         runs = mlflow.search_runs(
             experiment_ids=[experiment.experiment_id],
             filter_string="metrics.rmse_test >= 0 AND metrics.rmse_cv >= 0 AND metrics.rmse_train >= 0",
@@ -35,10 +34,7 @@ def load_best_model_from_mlflow():
             return
 
         # 2. Calcul du Score de Robustesse
-        # Formule : RMSE_Test + (Coef * |RMSE_Train - RMSE_Test|)
-        # Un coefficient de 0.5 donne autant d'importance à l'écart qu'au RMSE final
         COEFFICIENT = 0.5
-
         runs['gap'] = (runs['metrics.rmse_train'] - runs['metrics.rmse_test']).abs()
         runs['robust_score'] = runs['metrics.rmse_test'] + (COEFFICIENT * runs['gap'])
 
@@ -47,21 +43,26 @@ def load_best_model_from_mlflow():
         best_run_id = best_run["run_id"]
 
         # Log pour le debug
-        print(f"🏆 Champion détecté : {best_run.get('tags.mlflow.runName')}")
-        print(f"   Score Robustesse : {best_run['robust_score']:.2f}")
+        print(f"🏆 Champion détecté : {best_run.get('tags.mlflow.runName', 'Sans nom')}")
+        print(f"   Score Robustesse : {best_run['robust_score']:.4f}")
         print(f"   RMSE Test: {best_run['metrics.rmse_test']:.2f} | Gap: {best_run['gap']:.2f}")
 
-        # 4. Chargement
+        # 4. Chargement du modèle
         model_uri = f"runs:/{best_run_id}/model"
         best_model = mlflow.pyfunc.load_model(model_uri)
 
-        model_name_info = str(best_run.get("params.model_type", "Modèle MLflow"))
+        # 5. Mise à jour de l'info globale avec le score
+        model_type = str(best_run.get("params.model_type", "Modèle"))
+        robust_score = best_run['robust_score']
+
+        model_name_info = f"{model_type} (Score Robustesse: {robust_score:.4f})"
+
         print(f"✅ Modèle chargé : {model_name_info}")
 
     except Exception as e:
         print(f"❌ Erreur critique : {e}")
+        import traceback
         traceback.print_exc()
-
 # On exécute la recherche au démarrage de l'API
 load_best_model_from_mlflow()
 

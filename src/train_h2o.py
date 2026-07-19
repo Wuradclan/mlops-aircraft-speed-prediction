@@ -191,6 +191,7 @@ def train_evaluate_and_log(pipeline, X_train, y_train, X_test, y_test, model_pat
         params["optimized"] = True
     # Appel de la fonction de sauvegarde mutualisée
     log_and_save_model(pipeline, metrics, model_path, model_type, params=params)
+    return metrics
 
 
 def log_mlflow_data(params, metrics):
@@ -300,39 +301,50 @@ def main():
         with mlflow.start_run(run_name=f"Optuna_Study_{args.model_type}") as parent_run:
 
             def objective(trial):
-                # 4.1 Définition dynamique de l'espace de recherche
-                opt_n_estimators = trial.suggest_int("n_estimators", args.n_est_min, args.n_est_max, step=50)
-                opt_max_depth = trial.suggest_int("max_depth", args.depth_min, args.depth_max)
-                opt_learning_rate = trial.suggest_float("learning_rate", 0.01, 0.3, log=True)
-                opt_alpha = trial.suggest_float("alpha", 0.1, 10.0, log=True)
+                # 4.1 Définition dynamique des paramètres
+                params = {
+                    "n_estimators": trial.suggest_int("n_estimators", args.n_est_min, args.n_est_max, step=50),
+                    "max_depth": trial.suggest_int("max_depth", args.depth_min, args.depth_max),
+                    "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
+                    "alpha": trial.suggest_float("alpha", 0.1, 10.0, log=True)
+                }
 
-                # 4.2 Génération du modèle (Préfixe trial_)
-                trial_models = get_experiment_models(X_train.columns.tolist(),
-                                                     n_estimators=opt_n_estimators,
-                                                     max_depth=opt_max_depth,
-                                                     learning_rate=opt_learning_rate,
-                                                     alpha=opt_alpha)
+                # 4.2 Génération du modèle
+                trial_models = get_experiment_models(X_train.columns.tolist(), **params)
+                trial_pipeline = trial_models.get(run_name_mapping.get(args.model_type))
 
-                # Préfixe trial_
-                trial_run_name = run_name_mapping.get(args.model_type)
-                trial_pipeline = trial_models.get(trial_run_name)
-
-                # 4.3 Sous-Run MLflow
+                # 4.3 Sous-Run MLflow (Nested)
                 with mlflow.start_run(run_name=f"trial_{trial.number}", nested=True):
-                    # Calcul
-                    trial_cv_preds = cross_val_predict(trial_pipeline, X_train, y_train, cv=5, n_jobs=-1)
-                    rmse, r2, mae = calculate_metrics(y_train, trial_cv_preds)
+                    # A. Calcul des métriques (Réutilisation de tes fonctions)
 
-                    # Utilisation de la fonction mutualisée
-                    log_mlflow_data(
-                        params={
-                            "n_estimators": opt_n_estimators, "max_depth": opt_max_depth,
-                            "learning_rate": opt_learning_rate, "alpha": opt_alpha
-                        },
-                        metrics={"rmse": rmse, "mae": mae, "r2": r2}
-                    )
+                    # 1. Validation croisée
+                    cv_preds = cross_val_predict(trial_pipeline, X_train, y_train, cv=5, n_jobs=-1)
+                    rmse_cv, _, _ = calculate_metrics(y_train, cv_preds)
 
-                return rmse# Optuna retourne bien le RMSE du trial
+                    # 2. Entraînement et prédictions Train/Test
+                    trial_pipeline.fit(X_train, y_train)
+                    rmse_train, _, _ = calculate_metrics(y_train, trial_pipeline.predict(X_train))
+                    rmse_test, _, _ = calculate_metrics(y_test, trial_pipeline.predict(X_test))
+
+                    # B. Calcul du Score de Robustesse
+                    gap = abs(rmse_train - rmse_test)
+                    robust_score = rmse_test + (0.5 * gap)
+
+                    # C. Logging unifié (Réutilisation de ta fonction log_mlflow_data)
+                    trial_metrics = {
+                        "rmse_cv": rmse_cv,
+                        "rmse_train": rmse_train,
+                        "rmse_test": rmse_test,
+                        "robust_score": robust_score
+                    }
+
+                    # On ajoute le model_type aux params pour l'API
+                    full_params = {**params, "model_type": args.model_type}
+
+                    log_mlflow_data(params=full_params, metrics=trial_metrics)
+
+                    # D. Retour du score à Optuna
+                    return robust_score
             # 4.4 Lancement de l'étude
             study = optuna.create_study(direction="minimize")
             study.optimize(objective, n_trials=args.n_trials)
