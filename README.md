@@ -15,14 +15,14 @@
 
 ### Cloner le projet :
 
-    ```Bash
-        git clone https://github.com/Wuradclan/mlops-aircraft-speed-prediction.git
-        cd mlops-aircraft-speed-prediction
-    ```
-    ```Bash
-    #Lancer l'infrastructure :
-    docker-compose up -d --build
-    ```
+```Bash
+    git clone https://github.com/Wuradclan/mlops-aircraft-speed-prediction.git
+    cd mlops-aircraft-speed-prediction
+```
+```Bash
+#Lancer l'infrastructure :
+docker-compose up -d --build
+```
 
 ## 🧠 3. Model Zoo : Algorithmes Supportés
 
@@ -63,17 +63,17 @@
 
     En complément, nous utilisons Optuna pour l'optimisation fine des hyperparamètres sur les modèles de base (XGBoost, Random Forest, etc.).
     Commande pour lancer une optimisation :
-    ```Bash
-    docker compose exec trainer python -B src/train_h2o.py --model_type stacking --tune --n_trials 50
-    ```
+```Bash
+docker compose exec trainer python -B src/train_h2o.py --model_type stacking --tune --n_trials 50
+```
 
 #### C. Entraînement Baseline (Manuel):
 
     Pour entraîner un modèle spécifique (ex: XGBoost) :
 
-    ```Bash
-    docker-compose exec trainer python src/train_h2o.py --model_type xgboost --n_estimators 500 --max_depth 5
-    ```
+```Bash
+docker-compose exec trainer python src/train_h2o.py --model_type xgboost --n_estimators 500 --max_depth 5
+```
 
 ## ⚖️ 5. Sélection intelligente du "Modèle Champion" (API):
 
