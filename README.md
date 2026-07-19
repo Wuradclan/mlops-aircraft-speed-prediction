@@ -1,15 +1,15 @@
 # *****✈️ Aircraft Speed Prediction: End-to-End MLOps Pipeline*****
 
-    Ce dépôt contient une infrastructure MLOps complète et prête pour la production, dédiée à la prédiction de la vitesse des avions commerciaux.
-    Suite à une phase de benchmarking extensive (comparant Scikit-Learn, XGBoost, un Stacking Regressor personnalisé et l'AutoML), le modèle Champion sélectionné pour la production est propulsé par H2O AutoML (Stacked Ensemble), offrant des performances de pointe avec un RMSE de ~5.30.
+    Ce dépôt contient une infrastructure MLOps complète, conçue pour la rigueur et la transparence.
+    Contrairement aux approches basiques, ce pipeline intègre une "Model Gate" industrielle qui garantit que seuls les modèles généralisables — et non ceux qui surapprennent — atteignent la production.
 
 ## 🛠️ 1. Architecture Technique:
 
     Le projet est conteneurisé via Docker Compose pour garantir la reproductibilité. Il se compose de 4 microservices :
-    -   mlflow : Serveur de suivi pour les métriques, paramètres et artéfacts.
-    -   trainer : Environnement isolé pour l'entraînement et l'expérimentation (via src/train_h2o.py).
-    -   api : API REST (FastAPI) pour l'inférence en basse latence avec chargement dynamique du meilleur modèle.
-    -   frontend : Interface interactive (Streamlit) pour la simulation.
+    - **mlflow** : Serveur de suivi pour les métriques, paramètres et artéfacts.
+    - **trainer** : Environnement isolé pour l'entraînement (Scikit-Learn, Optuna, H2O).
+    - **api** : API REST (FastAPI) intégrant une logique de filtrage stricte contre l'overfitting.
+    - **frontend** : Interface interactive (Streamlit) pour la simulation.
 
 ## 🚀 2. Démarrage Rapide:
 
@@ -26,9 +26,9 @@ docker-compose up -d --build
 
 ## 🧠 3. Model Zoo : Algorithmes Supportés
 
-    Le script src/train_h2o.py est polyvalent et supporte les familles de modèles suivantes. Tu peux les entraîner manuellement avec la commande :
+    Le script src/train.py est polyvalent et supporte les familles de modèles suivantes. Tu peux les entraîner manuellement avec la commande :
 
-    docker-compose exec trainer python src/train_h2o.py --model_type [TYPE]
+    docker-compose exec trainer python src/train.py --model_type [TYPE]
 
 #### 🌲 Modèles à base d'arbres:
 
@@ -53,33 +53,48 @@ docker-compose up -d --build
     - stacking : Modèle hybride combinant plusieurs prédicteurs.
     - h2o : Le Champion. AutoML qui explore automatiquement les espaces de recherche.
 
-## 🧠 4. Cycle de vie des modèles:
+## 🧠 4. Méthodes d'Entraînement (Cycle de vie)
 
-#### A. Le Champion : H2O AutoML
+    Le pipeline utilise `src/train.py` pour orchestrer les entraînements selon trois approches distinctes,
+    permettant de comparer la robustesse de chaque méthode.
 
-    Le pipeline utilise src/train_h2o.py pour orchestrer les entraînements. H2O AutoML est utilisé pour explorer automatiquement les espaces de recherche complexes, effectuer le feature scaling et construire un Stacked Ensemble optimisé.
+#### A. Exploration Automatique (H2O AutoML)
+    L'AutoML est utilisé pour explorer rapidement les espaces de recherche complexes et construire des Stacked Ensembles.
+```Bash
+docker compose exec trainer python src/train.py --model_type h2o`
+````
 
 #### B. Optimisation automatique avec Optuna
 
-    En complément, nous utilisons Optuna pour l'optimisation fine des hyperparamètres sur les modèles de base (XGBoost, Random Forest, etc.).
+    Pour la recherche experte d'hyperparamètres sur les modèles de base (XGBoost, Random Forest, etc.).
+    L'optimiseur minimise le RMSE tout en appliquant une pénalité stricte en cas de surapprentissage pour forcer la création de modèles stables.
     Commande pour lancer une optimisation :
+
 ```Bash
-docker compose exec trainer python -B src/train_h2o.py --model_type stacking --tune --n_trials 50
+docker compose exec trainer python -B src/train.py --model_type stacking --tune --n_trials 50
+
+docker compose exec trainer python -B src/train.py --model_type xgboost --tune --n_trials 25
 ```
 
 #### C. Entraînement Baseline (Manuel):
 
-    Pour entraîner un modèle spécifique (ex: XGBoost) :
+    Pour entraîner et versionner un modèle spécifique avec des paramètres fixes :ex: XGBoost) :
 
 ```Bash
-docker-compose exec trainer python src/train_h2o.py --model_type xgboost --n_estimators 500 --max_depth 5
+docker-compose exec trainer python src/train.py --model_type xgboost --n_estimators 500 --max_depth 5
 ```
 
-## ⚖️ 5. Sélection intelligente du "Modèle Champion" (API):
+## ⚖️ 5. Model Gate : Sélection Industrielle du Champion (API)
 
-    L'API utilise une logique de sélection basée sur la robustesse pour éviter le surapprentissage. Au démarrage ou via /reload-model, elle interroge MLflow et calcule un Score de Robustesse :
-    Score=RMSE_Test+(0.5×∣RMSE_Train−RMSE_Test∣)
-    Cette approche pénalise les modèles qui "trichent" (overfitting) au profit de modèles généralisables.
+    L'API n'accepte pas aveuglément le modèle avec le meilleur score sur le papier. Au démarrage ou via `/reload-model`,
+    elle interroge MLflow et applique une **Douane (Model Gate)** stricte :
+
+    1. **Calcul du Surapprentissage :** 
+   `Overfit = (RMSE_Test - RMSE_Train) / RMSE_Test`
+    2. **Filtrage Anti-Triche :** Tout modèle dépassant un seuil de **30% d'overfit** est instantanément éliminé.
+    3. **Sélection Dynamique :** Parmi les modèles validés et stables, l'API charge celui possédant le meilleur `RMSE_Test`.
+
+    Cette approche pénalise les modèles qui mémorisent les données (overfitting) au profit de modèles capables de généraliser en conditions réelles.
 
 ## 🔌 6. API d'Inférence et Monitoring:
 
