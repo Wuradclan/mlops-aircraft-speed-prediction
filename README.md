@@ -14,13 +14,35 @@ Cloner le projet :
 ```Bash
 git clone https://github.com/Wuradclan/mlops-aircraft-speed-prediction.git
 cd mlops-aircraft-speed-prediction
-```
-Lancer l'infrastructure :
-```Bash
+
+#Lancer l'infrastructure :
+
 docker-compose up -d --build
 ```
+🧠 3. Model Zoo : Algorithmes Supportés
+Le script src/train_h2o.py est polyvalent et supporte les familles de modèles suivantes. Tu peux les entraîner manuellement avec la commande :
+docker-compose exec trainer python src/train_h2o.py --model_type [TYPE]
 
-🧠 3. Cycle de vie des modèles
+🌲 Modèles à base d'arbres
+xgboost : Le standard pour la performance sur données tabulaires.
+random_forest : Robuste et moins sensible au surapprentissage.
+extra_trees : Variantes extrêmement aléatoires pour plus de généralisation.
+
+📈 Modèles Linéaires
+linear : Régression linéaire simple (Baseline).
+ridge : Régression avec pénalité L2 (évite l'explosion des coefficients).
+lasso : Régression avec pénalité L1 (sélection de features).
+
+📐 Distance & Réseaux de Neurones
+knn : K-Nearest Neighbors (basé sur la proximité spatiale).
+svr : Support Vector Regression (efficace en haute dimension).
+mlp : Multi-Layer Perceptron (réseau de neurones simple).
+
+🏗️ Ensembles & AutoML
+stacking : Modèle hybride combinant plusieurs prédicteurs.
+h2o : Le Champion. AutoML qui explore automatiquement les espaces de recherche.
+
+🧠 4. Cycle de vie des modèles
 A. Le Champion : H2O AutoML
 Le pipeline utilise src/train_h2o.py pour orchestrer les entraînements. H2O AutoML est utilisé pour explorer automatiquement les espaces de recherche complexes, effectuer le feature scaling et construire un Stacked Ensemble optimisé.
 B. Optimisation automatique avec Optuna
@@ -37,24 +59,24 @@ Pour entraîner un modèle spécifique (ex: XGBoost) :
 docker-compose exec trainer python src/train_h2o.py --model_type xgboost --n_estimators 500 --max_depth 5
 ```
 
-⚖️ 4. Sélection intelligente du "Modèle Champion" (API)
+⚖️ 5. Sélection intelligente du "Modèle Champion" (API)
 L'API utilise une logique de sélection basée sur la robustesse pour éviter le surapprentissage. Au démarrage ou via /reload-model, elle interroge MLflow et calcule un Score de Robustesse :
 Score=RMSE_Test+(0.5×∣RMSE_Train−RMSE_Test∣)
 Cette approche pénalise les modèles qui "trichent" (overfitting) au profit de modèles généralisables.
 
-🔌 5. API d'Inférence et Monitoring
+🔌 6. API d'Inférence et Monitoring
 Swagger Docs : http://localhost:8000/docs
 Prédiction : POST /predict
 Rechargement dynamique : POST /reload-model (bascule automatiquement sur le nouveau champion détecté).
 
-📊 6. Suivi des Expérimentations (MLflow)
+📊 7. Suivi des Expérimentations (MLflow)
 Dashboard : http://localhost:5050
 Auto-discovery : Chaque run Optuna crée un "Parent Run" regroupant tous les "Nested Runs" (trials).
 
-🖥️ 7. Interface Utilisateur (Streamlit)
+🖥️ 8. Interface Utilisateur (Streamlit)
 Accès : http://localhost:8501
 
-🧹 8. Maintenance
+🧹 9. Maintenance
 Arrêt des services :
 ```Bash
 docker-compose down
