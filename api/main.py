@@ -13,83 +13,54 @@ model_name_info = "Aucun modèle chargé"
 
 
 def load_best_model_from_mlflow():
-    """Cherche et charge dynamiquement le meilleur modèle depuis MLflow"""
+    """Cherche et charge le meilleur modèle basé sur un score de robustesse."""
     global best_model, model_name_info
 
     try:
-        # On force l'adresse du conteneur MLflow sur le réseau Docker interne
         mlflow.set_tracking_uri("http://mlflow:5000")
-
-        # 1. Trouver l'expérience
         experiment = mlflow.get_experiment_by_name("Prediction_Vitesse_Avion")
         if not experiment:
-            print("Erreur : L'expérience MLflow est introuvable.")
             return
 
-        # On cherche uniquement les runs qui ont TOUTES leurs métriques remplies.
-        # Cela exclut automatiquement les trials Optuna qui sont partiels.
-        filter_string = (
-            "metrics.rmse_test >= 0 AND "
-            "metrics.rmse_cv >= 0 AND "
-            "metrics.rmse_train >= 0"
-        )
-
-        print(f"DEBUG: Recherche avec filtre -> {filter_string}")
-
+        # 1. Récupération des runs valides (avec métriques complètes)
+        # On augmente max_results pour avoir un pool de modèles à comparer
         runs = mlflow.search_runs(
             experiment_ids=[experiment.experiment_id],
-            filter_string=filter_string,
-            order_by=["metrics.rmse_test ASC"],
-            max_results=5  # Augmente à 5 pour voir si ça renvoie quelque chose en cas d'erreur
+            filter_string="metrics.rmse_test >= 0 AND metrics.rmse_cv >= 0 AND metrics.rmse_train >= 0",
+            max_results=50
         )
 
         if runs.empty:
-            print("Aucun run optimisé trouvé. Recherche d'un modèle classique...")
-            # Plan B : on cherche n'importe quel run qui n'est pas un sous-trial (souvent ils n'ont pas de parent_id)
-            runs = mlflow.search_runs(
-                experiment_ids=[experiment.experiment_id],
-                filter_string="tags.`mlflow.parentRunId` = ''",
-                order_by=["metrics.rmse_test ASC", "metrics.rmse ASC"],
-                max_results=1
-            )
-            if runs.empty:
-                print("Erreur : Aucun run valide avec modèle trouvé.")
-                return
+            print("❌ Aucun modèle complet trouvé.")
+            return
 
-        best_run = runs.iloc[0]
+        # 2. Calcul du Score de Robustesse
+        # Formule : RMSE_Test + (Coef * |RMSE_Train - RMSE_Test|)
+        # Un coefficient de 0.5 donne autant d'importance à l'écart qu'au RMSE final
+        COEFFICIENT = 0.5
+
+        runs['gap'] = (runs['metrics.rmse_train'] - runs['metrics.rmse_test']).abs()
+        runs['robust_score'] = runs['metrics.rmse_test'] + (COEFFICIENT * runs['gap'])
+
+        # 3. Sélection du champion (min score)
+        best_run = runs.loc[runs['robust_score'].idxmin()]
         best_run_id = best_run["run_id"]
 
-        model_type = best_run.get("params.model_type")
-        run_name = best_run.get("tags.mlflow.runName", "")
+        # Log pour le debug
+        print(f"🏆 Champion détecté : {best_run.get('tags.mlflow.runName')}")
+        print(f"   Score Robustesse : {best_run['robust_score']:.2f}")
+        print(f"   RMSE Test: {best_run['metrics.rmse_test']:.2f} | Gap: {best_run['gap']:.2f}")
 
-        # Récupération du nom du modèle (paramètre qu'on a logué plus tôt)
-        model_name_info = best_run.get("params.model_type", "Inconnu (PyFunc)")
-        print(f"🏆 Meilleur modèle trouvé : {model_name_info} (Run: {best_run_id})")
-
-        # Si le paramètre explicite existe et n'est pas "nan"
-        if pd.notna(model_type):
-            model_name_info = str(model_type)
-        # Sinon, on le déduit du nom du run (ex: "Optuna_Study_stacking" devient "Stacking")
-        elif pd.notna(run_name) and run_name != "":
-            clean_name = str(run_name).replace("Optuna_Study_", "").replace("run_", "")
-            # Nettoyage supplémentaire pour l'affichage ("06_stacking" -> "Stacking")
-            import re
-            clean_name = re.sub(r'^\d+_', '', clean_name).capitalize()
-            model_name_info = clean_name
-        else:
-            model_name_info = "Modèle MLflow"
-
-        print(f"🏆 Meilleur modèle trouvé : {model_name_info} (Run: {best_run_id})")
-
-        # 3. Charger le modèle via l'interface universelle pyfunc
+        # 4. Chargement
         model_uri = f"runs:/{best_run_id}/model"
         best_model = mlflow.pyfunc.load_model(model_uri)
-        print("✅ Modèle chargé en mémoire avec succès !")
+
+        model_name_info = str(best_run.get("params.model_type", "Modèle MLflow"))
+        print(f"✅ Modèle chargé : {model_name_info}")
 
     except Exception as e:
-        print(f"❌ Erreur critique lors du chargement MLflow : {e}")
+        print(f"❌ Erreur critique : {e}")
         traceback.print_exc()
-
 
 # On exécute la recherche au démarrage de l'API
 load_best_model_from_mlflow()
